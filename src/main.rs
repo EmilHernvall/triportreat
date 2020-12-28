@@ -1,9 +1,27 @@
+use argh::FromArgs;
+
 use crate::screen::{Screen, create_screen};
 
 mod screen;
 
 type Error = Box<dyn std::error::Error>;
 type Result<T> = std::result::Result<T, Error>;
+
+/// Trip or Treat
+#[derive(FromArgs)]
+struct Opt {
+    /// activate debug mode
+    #[argh(option, default="false")]
+    debug: bool,
+
+    /// station id
+    #[argh(option)]
+    station_id: u32,
+
+    /// trafiklab api key
+    #[argh(option)]
+    api_key: String,
+}
 
 fn draw_pattern<S: Screen>(screen: &mut S) {
     for y in 0..screen.yres() {
@@ -21,6 +39,8 @@ fn draw_pattern<S: Screen>(screen: &mut S) {
 }
 
 fn main() -> Result<()> {
+    let opt: Opt = argh::from_env();
+
     let mut screen = create_screen()?;
 
     loop {

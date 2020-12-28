@@ -12,5 +12,10 @@ with-framebuffer = ["framebuffer"]
 [dependencies]
 rusttype = "0.9.2"
 ttf-noto-sans = "0.1.1"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+argh = "0.1"
+ureq = { version = "1.5", features = ["json"] }
 framebuffer = { version = "0.1.7", optional = true }
 sdl2 = { version = "0.34", optional = true }
