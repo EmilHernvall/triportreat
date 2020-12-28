@@ -10,7 +10,10 @@ use sdl2::{
 };
 use rusttype::Font;
 
-use crate::{Result,Screen,Rgb};
+use crate::{
+    Result,
+    screen::{Screen,Rgb},
+};
 
 pub struct SdlScreen {
     canvas: Canvas<Window>,
