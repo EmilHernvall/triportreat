@@ -5,9 +5,9 @@ authors = ["Emil Hernvall <emil@c0la.se>"]
 edition = "2018"
 
 [features]
-default = ["with-sdl"]
-with-sdl = ["sdl2"]
-with-framebuffer = ["framebuffer"]
+default = ["hw-sdl"]
+hw-sdl = ["sdl2"]
+hw-pi = ["framebuffer", "rppal"]
 
 [dependencies]
 rusttype = "0.9.2"
@@ -20,3 +20,5 @@ chrono = { version = "0.4", features = ["serde"] }
 ureq = { version = "1.5", default-features = false, features = ["json", "native-tls"] }
 framebuffer = { version = "0.1.7", optional = true }
 sdl2 = { version = "0.34", optional = true }
+openssl = { version = "0.10.29", features = ["vendored"] }
+rppal = { version = "0.11.3", optional = true }

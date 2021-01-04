@@ -1,17 +1,18 @@
 use argh::FromArgs;
 
-use crate::screen::{Screen, create_screen};
+use crate::hardware::{create_hardware, Hardware, HwEvent};
 
-mod screen;
+pub mod buffer;
+pub mod hardware;
 
-type Error = Box<dyn std::error::Error>;
+type Error = Box<dyn std::error::Error + Sync + Send + 'static>;
 type Result<T> = std::result::Result<T, Error>;
 
 /// Trip or Treat
 #[derive(FromArgs)]
 struct Opt {
     /// activate debug mode
-    #[argh(option, default="false")]
+    #[argh(option, default = "false")]
     debug: bool,
 
     /// station id
@@ -27,7 +28,7 @@ mod trafiklab {
     use chrono::prelude::*;
     use serde_derive::Deserialize;
 
-    #[derive(Debug,Deserialize)]
+    #[derive(Debug, Deserialize)]
     #[serde(rename_all = "PascalCase")]
     pub struct RealtimeDepartureInfo {
         /// ex: tunnelbanans gröna linje
@@ -56,50 +57,35 @@ mod trafiklab {
         pub journey_number: u32,
     }
 
-    #[derive(Debug,Deserialize)]
+    #[derive(Debug, Deserialize)]
     #[serde(rename_all = "PascalCase")]
     pub struct RealtimeDeparturesResponseData {
         pub metros: Vec<RealtimeDepartureInfo>,
     }
 
-    #[derive(Debug,Deserialize)]
+    #[derive(Debug, Deserialize)]
     #[serde(rename_all = "PascalCase")]
     pub struct RealtimeDeparturesV4Response {
         pub response_data: RealtimeDeparturesResponseData,
     }
 }
 
-fn draw_pattern<S: Screen>(screen: &mut S) {
-    for y in 0..screen.yres() {
-        for x in 0..screen.xres() {
-            let [r_max, _, b_max] = screen.max();
-            let (r, g, b) : (u8, u8, u8) = (
-                (x * r_max as u32 / screen.xres()) as u8,
-                0,
-                (x * b_max as u32 / screen.xres()) as u8,
-            );
-
-            screen.set_pixel(x, y, [r, g, b]);
-        }
-    }
-}
-
 fn read_test_data() -> Result<trafiklab::RealtimeDeparturesResponseData> {
     let trafiklab::RealtimeDeparturesV4Response { response_data } =
-        serde_json::from_str(
-            &std::fs::read_to_string("./test/data/sl.json")?,
-        )?;
+        serde_json::from_str(&std::fs::read_to_string("./test/data/sl.json")?)?;
 
     Ok(response_data)
 }
 
-fn fetch_from_server(api_key: &str, station_id: u32) -> Result<trafiklab::RealtimeDeparturesResponseData> {
+fn fetch_from_server(
+    api_key: &str,
+    station_id: u32,
+) -> Result<trafiklab::RealtimeDeparturesResponseData> {
     let url = format!(
         "https://api.sl.se/api2/realtimedeparturesV4.json?key={}&siteid={}&timewindow=60",
-        api_key,
-        station_id,
+        api_key, station_id,
     );
-    let response = dbg!(ureq::get(&url).call());
+    let response = ureq::get(&url).call();
     if !response.ok() {
         panic!("error {}: {}", response.status(), response.into_string()?);
     }
@@ -119,25 +105,61 @@ fn main() -> Result<()> {
         dbg!(fetch_from_server(&opt.api_key, opt.station_id)?)
     };
 
-    let mut screen = create_screen()?;
+    let mut hw = create_hardware()?;
 
+    let mut scroll: isize = 0;
     loop {
-        // draw_pattern(&mut screen);
-        let mut y_offset = 0;
-        for departure in &data.metros {
-            screen.draw_text(
+        let mut buffer = buffer::Buffer::new(hw.xres(), hw.yres());
+
+        let mut y_offset = 40;
+        let line_size = 32;
+        let per_page = (hw.xres() - y_offset) / line_size;
+        let max_scroll_pos = (data.metros.len() as isize - per_page as isize).max(0);
+
+        let events = hw.poll_events()?;
+        for event in events {
+            match event {
+                HwEvent::Scroll(delta) => {
+                    let updated_scroll = scroll + delta;
+                    if updated_scroll < 0 {
+                        scroll = 0;
+                    } else if updated_scroll > max_scroll_pos {
+                        scroll = max_scroll_pos;
+                    } else {
+                        scroll = updated_scroll;
+                    }
+                    dbg!(scroll);
+                }
+            }
+        }
+
+        buffer.draw_text(
+            10,
+            0,
+            line_size as f32,
+            &format!("{}", chrono::Local::now().time()),
+            [0xFF, 0xFF, 0],
+        );
+
+        for (i, departure) in data.metros.iter().enumerate().skip(scroll as usize) {
+            buffer.draw_text(
                 10,
                 y_offset,
-                32.0,
-                &format!("{} {}", departure.destination, departure.display_time),
+                line_size as f32,
+                &format!("{} {} {}", i, departure.destination, departure.display_time),
+                [0xFF, 0xFF, 0],
             );
-            y_offset += 32;
+            y_offset += line_size;
 
-            if y_offset + 32 > screen.yres() {
+            if y_offset + line_size > hw.xres() {
                 break;
             }
         }
-        screen.flip();
-        std::thread::sleep(std::time::Duration::from_millis(1000/60));
+
+        let start = std::time::Instant::now();
+        hw.flip(&buffer)?;
+        let end = std::time::Instant::now();
+        println!("Rendered frame in {}ms", (end - start).as_millis());
+        std::thread::sleep(std::time::Duration::from_millis(1000 / 60));
     }
 }
