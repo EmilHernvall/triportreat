@@ -34,7 +34,7 @@ impl SdlHardware {
     }
 }
 
-impl Hardware for SdlHardware {
+impl Hardware<[u8; 3]> for SdlHardware {
     fn xres(&self) -> u32 {
         self.canvas.output_size().unwrap().1
     }
@@ -77,7 +77,7 @@ impl Hardware for SdlHardware {
         Ok(events)
     }
 
-    fn flip(&mut self, buffer: &Buffer) -> Result<()> {
+    fn flip(&mut self, buffer: &Buffer<[u8; 3]>) -> Result<()> {
         for (x, y, rgb) in buffer.pixels() {
             self.canvas
                 .set_draw_color(Color::RGB(rgb[0], rgb[1], rgb[2]));

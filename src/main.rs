@@ -106,10 +106,10 @@ fn main() -> Result<()> {
     };
 
     let mut hw = create_hardware()?;
+    let mut buffer = buffer::Buffer::new(hw.xres(), hw.yres());
 
     let mut scroll: isize = 0;
     loop {
-        let mut buffer = buffer::Buffer::new(hw.xres(), hw.yres());
 
         let mut y_offset = 40;
         let line_size = 32;
@@ -133,12 +133,13 @@ fn main() -> Result<()> {
             }
         }
 
+        let start = std::time::Instant::now();
         buffer.draw_text(
             10,
             0,
             line_size as f32,
             &format!("{}", chrono::Local::now().time()),
-            [0xFF, 0xFF, 0],
+            [1.0, 1.0, 0.0],
         );
 
         for (i, departure) in data.metros.iter().enumerate().skip(scroll as usize) {
@@ -147,7 +148,7 @@ fn main() -> Result<()> {
                 y_offset,
                 line_size as f32,
                 &format!("{} {} {}", i, departure.destination, departure.display_time),
-                [0xFF, 0xFF, 0],
+                [1.0, 1.0, 0.0],
             );
             y_offset += line_size;
 
@@ -156,8 +157,8 @@ fn main() -> Result<()> {
             }
         }
 
-        let start = std::time::Instant::now();
         hw.flip(&buffer)?;
+        buffer.clear();
         let end = std::time::Instant::now();
         println!("Rendered frame in {}ms", (end - start).as_millis());
         std::thread::sleep(std::time::Duration::from_millis(1000 / 60));

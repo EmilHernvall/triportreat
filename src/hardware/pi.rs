@@ -5,7 +5,7 @@ use framebuffer::{Framebuffer, VarScreeninfo};
 use rppal::gpio::{Gpio, Level, Trigger};
 
 use crate::{
-    buffer::{Buffer, Rgb},
+    buffer::Buffer,
     Error, Hardware, HwEvent, Result,
 };
 
@@ -112,7 +112,6 @@ pub struct PiHardware {
     vinf: VarScreeninfo,
     max: [u8; 3],
     fb: Framebuffer,
-    buffer: Vec<u8>,
     events: Arc<Mutex<Vec<HwEvent>>>,
 }
 
@@ -133,9 +132,6 @@ impl PiHardware {
         ];
 
         let fb = Framebuffer::new(device)?;
-        let buffer = (0..(2 * vinf.yres * vinf.xres))
-            .map(|_| 0)
-            .collect::<Vec<u8>>();
 
         let events = Arc::new(Mutex::new(vec![]));
 
@@ -148,27 +144,12 @@ impl PiHardware {
             vinf,
             max,
             fb,
-            buffer,
             events,
         })
     }
-
-    #[inline]
-    fn set_pixel(&mut self, x: u32, y: u32, rgb: Rgb) {
-        let c = (((rgb[0] as u32 * self.max[0] as u32) / 0xFF) << self.vinf.red.offset)
-            | (((rgb[1] as u32 * self.max[1] as u32) / 0xFF) << self.vinf.green.offset)
-            | (((rgb[2] as u32 * self.max[2] as u32) / 0xFF) << self.vinf.blue.offset);
-
-        let (fst, snd) = ((c & 0xFF00) >> 8, c & 0x00FF);
-
-        let pos = 2 * (y * self.vinf.xres + x) as usize;
-
-        self.buffer[pos] = fst as u8;
-        self.buffer[pos + 1] = snd as u8;
-    }
 }
 
-impl Hardware for PiHardware {
+impl Hardware<u16> for PiHardware {
     fn xres(&self) -> u32 {
         self.vinf.xres
     }
@@ -191,12 +172,14 @@ impl Hardware for PiHardware {
         Ok(fresh_events)
     }
 
-    fn flip(&mut self, buffer: &Buffer) -> Result<()> {
-        for (x, y, rgb) in buffer.pixels() {
-            self.set_pixel(x, y, rgb);
-        }
-
-        self.fb.write_frame(&self.buffer);
+    fn flip(&mut self, buffer: &Buffer<u16>) -> Result<()> {
+        let buffer: &[u8] = unsafe {
+            std::slice::from_raw_parts(
+                buffer.data.as_ptr() as *const u8,
+                2*buffer.data.len(),
+            )
+        };
+        self.fb.write_frame(buffer);
 
         Ok(())
     }

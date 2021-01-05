@@ -1,4 +1,4 @@
-use crate::{buffer::Buffer, Result};
+use crate::{buffer::{Buffer,PixelType}, Result};
 
 #[cfg(feature = "hw-pi")]
 pub mod pi;
@@ -19,10 +19,10 @@ pub enum HwEvent {
     Scroll(isize),
 }
 
-pub trait Hardware {
+pub trait Hardware<P: PixelType> {
     fn xres(&self) -> u32;
     fn yres(&self) -> u32;
     fn max(&self) -> [u8; 3];
     fn poll_events(&mut self) -> Result<Vec<HwEvent>>;
-    fn flip(&mut self, buffer: &Buffer) -> Result<()>;
+    fn flip(&mut self, buffer: &Buffer<P>) -> Result<()>;
 }
