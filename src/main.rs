@@ -1,9 +1,15 @@
+use std::rc::Rc;
+
 use argh::FromArgs;
 
-use crate::hardware::{create_hardware, Hardware, HwEvent};
+use crate::{
+    gadget::{Gadget, HorizontalGadget, ScrollGadget, TextGadget, RenderRect},
+    hardware::{create_hardware, Hardware, HwEvent},
+};
 
 pub mod buffer;
 pub mod hardware;
+pub mod gadget;
 
 type Error = Box<dyn std::error::Error + Sync + Send + 'static>;
 type Result<T> = std::result::Result<T, Error>;
@@ -108,10 +114,60 @@ fn main() -> Result<()> {
     let mut hw = create_hardware()?;
     let mut buffer = buffer::Buffer::new(hw.xres(), hw.yres());
 
+    let mut outer_layout = ScrollGadget::new(buffer.width(), buffer.height());
+    let clock = Rc::new(TextGadget::new(
+        format!("{}", chrono::Local::now().time()),
+        buffer.width(),
+        32,
+        [1.0, 1.0, 1.0],
+        32.0,
+    ));
+    outer_layout.children.push(clock.clone());
+
+    let mut inner_layout = ScrollGadget::new(buffer.height(), buffer.width());
+    for (i, departure) in data.metros.iter().enumerate() {
+        inner_layout.children.push(
+            Rc::new(TextGadget::new(
+                format!("{} {} {}", i, departure.destination, departure.display_time),
+                100,
+                32,
+                [1.0, 1.0, 0.0],
+                32.0,
+            )),
+        );
+
+        //let mut container = HorizontalGadget::new(buffer.height(), 32);
+
+        //container.children.push(
+        //    Rc::new(TextGadget::new(
+        //        "foo".to_string(), // format!("{} {}", i, departure.destination),
+        //        100,
+        //        32,
+        //        [1.0, 1.0, 0.0],
+        //        32.0,
+        //    )),
+        //);
+
+        //container.children.push(
+        //    Rc::new(TextGadget::new(
+        //        "bar".to_string(), // format!("{}", departure.display_time),
+        //        50,
+        //        32,
+        //        [1.0, 1.0, 0.0],
+        //        32.0,
+        //    )),
+        //);
+
+        //inner_layout.children.push(Rc::new(container));
+    }
+    let inner_layout = Rc::new(inner_layout);
+    outer_layout.children.push(inner_layout.clone());
+
     let mut scroll: isize = 0;
     loop {
+        clock.text(format!("{}", chrono::Local::now().time().format("%H:%M:%S")));
 
-        let mut y_offset = 40;
+        let y_offset = 40;
         let line_size = 32;
         let per_page = (hw.xres() - y_offset) / line_size;
         let max_scroll_pos = (data.metros.len() as isize - per_page as isize).max(0);
@@ -129,38 +185,25 @@ fn main() -> Result<()> {
                         scroll = updated_scroll;
                     }
                     dbg!(scroll);
+                    inner_layout.scroll(scroll as usize);
                 }
             }
         }
 
         let start = std::time::Instant::now();
-        buffer.draw_text(
-            10,
-            0,
-            line_size as f32,
-            &format!("{}", chrono::Local::now().time()),
-            [1.0, 1.0, 0.0],
-        );
-
-        for (i, departure) in data.metros.iter().enumerate().skip(scroll as usize) {
-            buffer.draw_text(
-                10,
-                y_offset,
-                line_size as f32,
-                &format!("{} {} {}", i, departure.destination, departure.display_time),
-                [1.0, 1.0, 0.0],
-            );
-            y_offset += line_size;
-
-            if y_offset + line_size > hw.xres() {
-                break;
-            }
+        let rect = RenderRect {
+            x: 0,
+            y: 0,
+            width: buffer.height(),
+            height: buffer.width(),
+        };
+        if outer_layout.dirty() {
+            outer_layout.render(rect, &mut buffer);
+            hw.flip(&buffer)?;
+            let end = std::time::Instant::now();
+            println!("Rendered frame in {}ms", (end - start).as_millis());
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(1000 / 60));
         }
-
-        hw.flip(&buffer)?;
-        buffer.clear();
-        let end = std::time::Instant::now();
-        println!("Rendered frame in {}ms", (end - start).as_millis());
-        std::thread::sleep(std::time::Duration::from_millis(1000 / 60));
     }
 }

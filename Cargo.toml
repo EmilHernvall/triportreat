@@ -22,3 +22,4 @@ framebuffer = { version = "0.1.7", optional = true }
 sdl2 = { version = "0.34", optional = true }
 openssl = { version = "0.10.29", features = ["vendored"] }
 rppal = { version = "0.11.3", optional = true }
+once_cell = "1.5.2"

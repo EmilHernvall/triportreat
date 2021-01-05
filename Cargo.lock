@@ -602,6 +602,7 @@ dependencies = [
  "argh",
  "chrono",
  "framebuffer",
+ "once_cell",
  "openssl",
  "rppal",
  "rusttype",
